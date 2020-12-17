@@ -1,6 +1,7 @@
+from app import db
 from flask_restx import Namespace, Resource, fields
-from app.db import tweet_repository
 from app.models import Tweet
+
 
 api = Namespace('tweets')  # Base route
 
@@ -20,7 +21,8 @@ json_new_tweet = api.model('New tweet', {
 class TweetResource(Resource):
     @api.marshal_with(json_tweet)  # Used to control JSON response format
     def get(self, tweet_id):  # GET method
-        tweet = tweet_repository.get(tweet_id)
+        #tweet = tweet_repository.get(tweet_id)
+        tweet = db.session.query(Tweet).get(tweet_id)
         if tweet is None:
             api.abort(404)  # abort will throw an exception and break execution flow (equivalent to 'return' keyword for an error)
         return tweet, 200
@@ -63,3 +65,47 @@ class TweetsResource(Resource):
     def get(self):  # GET method
         tweets = tweet_repository.get_all()
         return tweets, 200
+
+class TweetResource(Resource):
+    @api.marshal_with(json_tweet)
+    def get(self, id):
+        tweet = db.session.query(Tweet).get(id)
+        if tweet is None:
+            api.abort(404, "Tweet {} doesn't exist".format(id))
+        else:
+            return tweet
+
+    @api.marshal_with(json_tweet, code=200)
+    @api.expect(json_new_tweet, validate=True)
+    def patch(self, id):
+        tweet = db.session.query(Tweet).get(id)
+        if tweet is None:
+            api.abort(404, "Tweet {} doesn't exist".format(id))
+        else:
+            tweet.text = api.payload["text"]
+            db.session.commit()
+            return tweet
+
+    def delete(self, id):
+        tweet = db.session.query(Tweet).get(id)
+        if tweet is None:
+            api.abort(404, "Tweet {} doesn't exist".format(id))
+        else:
+            db.session.delete(tweet)
+            db.session.commit()
+            return None
+
+@api.route('')
+@api.response(422, 'Invalid tweet')
+class TweetsResource(Resource):
+    @api.marshal_with(json_tweet, code=201)
+    @api.expect(json_new_tweet, validate=True)
+    def post(self):
+        text = api.payload["text"]
+        if len(text) > 0:
+            tweet = Tweet(text=text)
+            db.session.add(tweet)
+            db.session.commit()
+            return tweet, 201
+        else:
+            return abort(422, "Tweet text can't be empty")
